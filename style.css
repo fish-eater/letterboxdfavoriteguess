@@ -364,23 +364,42 @@ main {
 .username-controls {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  align-items: center;
+  gap: 0;
   margin-bottom: 20px;
+  background: #fcfcfc;
+  border: 1.3px solid #aaa;
+  border-radius: 8px;
+  padding: 4px 14px;
+  /* Slightly more padding for the logo */
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.input-logo {
+  width: 24px;
+  opacity: 0.8;
+}
+
+.url-prefix {
+  color: #777;
+  font-size: 14px;
+  user-select: none;
+  font-family: inherit;
 }
 
 #usernameInput {
-  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  padding: 8px 4px;
   font-size: 15px;
-  border-radius: 4px;
-  border: 1.3px solid #aaa;
-  background: #fcfcfc;
-  width: 180px;
+  width: 150px;
   font-family: Georgia, serif;
 }
 
 #usernameInput:focus {
   outline: none;
-  border-color: #191919;
 }
 
 #actionBtn {
@@ -393,6 +412,7 @@ main {
   font-family: Georgia, serif;
   transition: background 0.18s, transform 0.15s;
   padding: 7px 18px;
+  margin-left: 10px;
 }
 
 #actionBtn:hover {

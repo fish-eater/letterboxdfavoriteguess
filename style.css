@@ -359,9 +359,7 @@ main {
 
 .game-container.no-background::before,
 .game-container.no-background {
-  background: #fbfbfb;
-  box-shadow: none;
-  border: 1px solid #eee;
+  background: #ffffff;
 }
 
 .game-container.no-background::before {
@@ -374,7 +372,7 @@ main {
   align-items: center;
   gap: 0;
   margin-bottom: 20px;
-  background: #fcfcfc;
+  background: #ffffff;
   border: 1.3px solid #aaa;
   border-radius: 8px;
   padding: 4px 14px;
@@ -632,7 +630,6 @@ main {
 
   .about-panel.closed {
     margin-bottom: -300px;
-    /* Rough height estimate to pull content up */
     margin-right: 0;
     transform: translateY(-20px);
     opacity: 0;

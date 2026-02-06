@@ -1,12 +1,29 @@
+// letterboxd favorites explorer
+// fetches and displays random letterboxd users' favorite films
+// maintains a queue of users from popular followers to improve performance
+
+// config --------------------------------------------------------
+
 const CORS_PROXY = "https://cors.eu.org/";
-// if cors.eu.org is down:
-// https://cors.io/?u=
-// https://corsproxy.io/?url=
 
-const POST_LIMIT = 100; // reddit api max per request
-const SUBREDDIT = "ExplainAFilmPlotBadly";
+const POPULAR_USERS = [
+  "schaffrillas", "ttotoro", "kurstboy", "zoerosebryant", "cobbb",
+  "jaragon23", "demiadejuyigbe", "jay", "framesofnick", "superpulse",
+  "aarnwlsn", "deathproof", "jonathanfujii", "thegaladriel", "ahbr",
+  "davidlsims", "timtamtitus", "ingridgoeswest", "whentheometfilm",
+  "vinu_suresh", "thejoshl", "suspirliam", "alor", "jeaba",
+  "silentdawn", "usercillian", "tototoro", "booksandbars",
+  "colonelmortimer"
+];
 
-let posts = [], validatedRiddles = [], lastSort = "", isLoadingPost = false;
+// state ---------------------------------------------------------
+
+let currentMode = "next";
+let currentUsername = "";
+let isLoading = false;
+let userQueue = [];
+
+// utilities -----------------------------------------------------
 
 const shuffle = arr => {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -16,283 +33,470 @@ const shuffle = arr => {
   return arr;
 };
 
-const cleanAnswer = text => text.trim().replace(/[?!.]+$/, '');
+// ui helpers ----------------------------------------------------
 
-// fetch movie poster
-async function getMoviePoster(movieName) {
-  try {
-    const searchQuery = encodeURIComponent(`${movieName} MOVIE POSTER`);
-    const spUrl = `https://www.startpage.com/sp/search?query=${searchQuery}&cat=images&language=english&lui=english`;
-    const resp = await fetch(CORS_PROXY + encodeURIComponent(spUrl));
-    if (!resp.ok) return null;
-    const html = await resp.text();
-    return extractStartpageImage(html) || null;
-  } catch (err) {
-    console.log("Error fetching poster:", err);
-    return null;
+function showLoading() {
+  const content = document.getElementById("content");
+  if (!content) return;
+  content.innerHTML = '<span class="loading">loading favorites...</span>';
+}
+
+function showError(message) {
+  const content = document.getElementById("content");
+  if (!content) return;
+  content.innerHTML = `<div class="error-message"><p>${message}</p></div>`;
+}
+
+function renderFavorites(favorites, username) {
+  const contentEl = document.getElementById("content");
+  if (!contentEl) return;
+
+  let html = `
+    <div class="username-display">
+      <a href="https://letterboxd.com/${username}/" target="_blank">@${username}</a>'s favorites
+    </div>
+    <div class="poster-grid">
+  `;
+
+  favorites.forEach((film, index) => {
+    const isHidden = index === 0;
+    const posterSrc = film.posterUrl || "https://via.placeholder.com/230x345?text=No+Poster";
+
+    // create star rating display
+    let starsHTML = '';
+    if (film.rating) {
+      const fullStars = Math.floor(film.rating);
+      const hasHalfStar = film.rating % 1 >= 0.5;
+
+      for (let i = 0; i < fullStars; i++) {
+        starsHTML += '★';
+      }
+      if (hasHalfStar) {
+        starsHTML += '½';
+      }
+    }
+
+    html += `
+      <div class="poster-item ${isHidden ? 'hidden-poster' : ''}" data-index="${index}">
+        <div class="poster-wrapper">
+          <img src="${posterSrc}" alt="${film.name}" class="poster-image">
+          ${isHidden ? '<div class="poster-overlay"><span>click to reveal</span></div>' : ''}
+        </div>
+        <div class="poster-info ${isHidden ? 'hidden-info' : ''}">
+          <div class="poster-title ${isHidden ? 'hidden-title' : ''}">${film.name}</div>
+          ${starsHTML ? `<div class="poster-rating ${isHidden ? 'hidden-rating' : ''}">${starsHTML}</div>` : ''}
+          ${film.review ? `<div class="poster-review ${isHidden ? 'hidden-review' : ''}">"${film.review}"</div>` : ''}
+        </div>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  contentEl.innerHTML = html;
+
+  // add click handler for the hidden poster - only on the image wrapper
+  const hiddenPoster = contentEl.querySelector(".hidden-poster");
+  if (hiddenPoster) {
+    const posterWrapper = hiddenPoster.querySelector(".poster-wrapper");
+    if (posterWrapper) {
+      posterWrapper.style.cursor = 'pointer';
+      posterWrapper.addEventListener("click", function (e) {
+        e.stopPropagation();
+        const posterItem = this.closest('.poster-item');
+        posterItem.classList.toggle('hidden-poster');
+      });
+    }
   }
 }
 
-// can you guess who wrote this? i did not
-function extractStartpageImage(html) {
-  const imgRegex = /<img[^>]*src="\/av\/proxy-image\?piurl=([^"]+)"[^>]*>/g;
-  const matches = [...html.matchAll(imgRegex)];
+// user queue management -----------------------------------------
 
-  for (const match of matches) {
+async function fetchMoreUsers() {
+  try {
+    const popularUser = POPULAR_USERS[Math.floor(Math.random() * POPULAR_USERS.length)];
+    const page = Math.floor(Math.random() * 50) + 1;
+    const url = `https://letterboxd.com/${popularUser}/followers/page/${page}/`;
+
+    console.log(`Fetching more users from ${url}...`);
+
+    const resp = await fetch(CORS_PROXY + encodeURIComponent(url));
+    if (!resp.ok) {
+      console.error(`Failed to fetch followers: ${resp.status} ${resp.statusText}`);
+      throw new Error("Failed to fetch followers");
+    }
+
+    const html = await resp.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    // try multiple selectors in case structure changed
+    let userLinks = doc.querySelectorAll('.person-summary .name');
+
+    if (userLinks.length === 0) {
+      userLinks = doc.querySelectorAll('.person-summary a[href^="/"]');
+      console.log(`Using fallback selector, found ${userLinks.length} links`);
+    }
+
+    const newUsers = [];
+
+    userLinks.forEach(link => {
+      const href = link.getAttribute('href');
+      if (href) {
+        const username = href.replace(/\//g, '').trim();
+        if (username && !username.includes('/') && username.length > 0) {
+          newUsers.push(username);
+        }
+      }
+    });
+
+    console.log(`Found ${newUsers.length} new users from ${userLinks.length} links`);
+
+    if (newUsers.length > 0) {
+      userQueue.push(...shuffle(newUsers));
+      return true;
+    } else {
+      console.warn(`No users found on page ${page} of ${popularUser}`);
+    }
+  } catch (err) {
+    console.error("Error fetching more users:", err);
+  }
+  return false;
+}
+
+async function getNextUser() {
+  if (userQueue.length === 0) {
+    await fetchMoreUsers();
+  }
+  return userQueue.shift();
+}
+
+// letterboxd data fetching --------------------------------------
+
+async function fetchFilmReview(username, filmSlug) {
+  if (!filmSlug) return { rating: null, review: null };
+
+  try {
+    const url = `https://letterboxd.com/${username}/film/${filmSlug}/reviews/`;
+    const resp = await fetch(CORS_PROXY + encodeURIComponent(url));
+
+    if (!resp.ok) return { rating: null, review: null };
+
+    const html = await resp.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    // find the first review article
+    const reviewArticle = doc.querySelector('.production-viewing.-viewing');
+
+    if (!reviewArticle) return { rating: null, review: null };
+
+    // extract rating
+    let rating = null;
+    const ratingSpan = reviewArticle.querySelector('.rating');
+    if (ratingSpan) {
+      const ratingClass = Array.from(ratingSpan.classList).find(c => c.startsWith('rated-'));
+      if (ratingClass) {
+        const ratingValue = parseInt(ratingClass.replace('rated-', ''));
+        rating = ratingValue / 2; // convert from 10-point to 5-star
+      }
+    }
+
+    // extract review text
+    let review = null;
+    const reviewBody = reviewArticle.querySelector('.body-text');
+    if (reviewBody) {
+      // get text content, strip html
+      const reviewText = reviewBody.textContent.trim();
+      if (reviewText && reviewText.length > 0) {
+        review = reviewText;
+      }
+    }
+
+    return { rating, review };
+  } catch (err) {
+    console.error("Error fetching review:", err);
+    return { rating: null, review: null };
+  }
+}
+
+async function fetchPosterUrl(detailsEndpoint, filmLink) {
+  // try letterboxd's internal json api first - this should return poster urls directly
+  if (detailsEndpoint) {
     try {
-      const fullImgTag = match[0];
-      let piurlParam = match[1];
+      const jsonUrl = `https://letterboxd.com${detailsEndpoint}`;
+      const resp = await fetch(CORS_PROXY + encodeURIComponent(jsonUrl));
 
-      const heightMatch = fullImgTag.match(/height="(\d+)px"/);
-      if (heightMatch) {
-        const height = parseInt(heightMatch[1]);
-        // skip small filter thumbnails (40px x 40px)
-        if (height <= 50) continue;
+      if (resp.ok) {
+        const data = await resp.json();
+
+        // check various possible poster fields
+        if (data.image && !data.image.includes("empty-poster")) {
+          return data.image;
+        }
+        if (data.poster && !data.poster.includes("empty-poster")) {
+          return data.poster;
+        }
+        if (data.filmData?.poster) {
+          return data.filmData.poster;
+        }
+      }
+    } catch (err) {
+      // json endpoint failed
+    }
+  }
+
+  // fallback: fetch the film page and look for poster urls in the html
+  if (filmLink) {
+    try {
+      const filmUrl = `https://letterboxd.com${filmLink}`;
+      const resp = await fetch(CORS_PROXY + encodeURIComponent(filmUrl));
+
+      if (!resp.ok) {
+        return null;
       }
 
-      // decode HTML entities
-      piurlParam = piurlParam.replace(/&amp;/g, '&');
-      const piurlValue = piurlParam.split('&')[0];
-      const imageUrl = decodeURIComponent(piurlValue);
+      const html = await resp.text();
 
-      // filter out other small images
-      if (imageUrl.includes('thumbnail') ||
-        imageUrl.includes('logo') ||
-        imageUrl.includes('icon')) {
-        continue;
+      // look for poster urls in the html - a.ltrbxd.com/resized/film-poster/...
+      const posterMatch = html.match(/https:\/\/a\.ltrbxd\.com\/resized\/film-poster\/[^\s"'<>]+\.jpg[^\s"'<>]*/);
+      if (posterMatch) {
+        return posterMatch[0];
       }
 
-      return imageUrl;
-    } catch (e) {
-      continue;
+      // try sm/upload pattern - but filter for posters (not backdrops)
+      // posters have aspect ratios like 230-0-345, backdrops are 1200-xxx-675
+      const allSmMatches = html.matchAll(/https:\/\/a\.ltrbxd\.com\/resized\/sm\/upload\/[^\s"'<>]+\.jpg[^\s"'<>]*/g);
+      for (const match of allSmMatches) {
+        const url = match[0];
+        // skip backdrop-style images (wide aspect ratio indicators)
+        if (!url.includes('-1200-') && !url.includes('-675-') && !url.includes('crop-000000')) {
+          return url;
+        }
+      }
+
+      return null;
+    } catch (err) {
+      return null;
     }
   }
 
   return null;
 }
 
+async function fetchFavorites(username) {
+  const url = `https://letterboxd.com/${username}/`;
+  const resp = await fetch(CORS_PROXY + encodeURIComponent(url));
 
-// fetch multiple pages to build larger pool
-async function getPostList(sort) {
-  const base = `https://www.reddit.com/r/${SUBREDDIT}/`;
-  const endpoint = (sort === "new") ? "new.json" : "top.json";
-  const timeParam = (sort === "all" || sort === "year" || sort === "month") ? `t=${sort}&` : '';
-
-  let allPosts = [];
-  let after = null;
-  const pagesToFetch = 5; // fetch 5 pages = 500 posts
-
-  for (let i = 0; i < pagesToFetch; i++) {
-    // build URL properly based on whether we have timeParam and after
-    let url = `${base}${endpoint}?${timeParam}limit=${POST_LIMIT}`;
-    if (after) url += `&after=${after}`;
-
-    const resp = await fetch(CORS_PROXY + encodeURIComponent(url));
-    if (!resp.ok) break;
-
-    const data = await resp.json();
-    const children = data.data.children;
-    if (!children.length) break;
-
-    allPosts.push(...children
-      .filter(post => {
-        const p = post.data;
-        return !p.stickied && !p.over_18 && (!p.selftext || p.selftext.trim() === '');
-      })
-      .map(post => ({
-        permalink: post.data.permalink,
-        title: post.data.title,
-        author: post.data.author,
-        score: post.data.score,
-        validated: false
-      })));
-
-    after = data.data.after;
-    if (!after) break;
+  if (!resp.ok) {
+    throw new Error(`Could not find user "${username}"`);
   }
 
-  return allPosts;
-}
+  const html = await resp.text();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
 
+  const favoritesSection = doc.querySelector("#favourites") || doc.querySelector("#favorites") || doc.querySelector("section.favourites");
 
-// validate post by checking comments
-async function validatePost(post) {
-  try {
-    const commentsUrl = `https://www.reddit.com${post.permalink}.json`;
-    const commentsResp = await fetch(CORS_PROXY + encodeURIComponent(commentsUrl));
-    if (!commentsResp.ok) return null;
-
-    const commentsData = await commentsResp.json();
-    if (!commentsData[1]?.data?.children) return null;
-
-    const comments = commentsData[1].data.children;
-    let solvedAnswer = null;
-
-    for (const comment of comments) {
-      if (!comment.data?.body || comment.data.body === '[deleted]') continue;
-
-      const replies = comment.data.replies;
-      if (!replies?.data?.children) continue;
-
-      for (const reply of replies.data.children) {
-        if (reply.data?.author === post.author &&
-          reply.data?.body?.toLowerCase().includes('solved')) {
-          solvedAnswer = cleanAnswer(comment.data.body);
-          break;
-        }
-      }
-      if (solvedAnswer) break;
-    }
-
-    if (!solvedAnswer) return null;
-    post.validated = true;
-
-    return {
-      title: post.title,
-      answer: solvedAnswer,
-      score: post.score,
-      posterLoaded: false,
-      posterUrl: null
-    };
-  } catch (err) {
-    console.log("Error validating post:", err);
-    return null;
-  }
-}
-
-async function getNextValidRiddle() {
-  if (validatedRiddles.length > 0) return validatedRiddles.shift();
-
-  while (posts.length > 0) {
-    const post = posts.shift();
-    if (post.validated) continue;
-    const riddle = await validatePost(post);
-    if (riddle) return riddle;
+  if (!favoritesSection) {
+    throw new Error(`User "${username}" has no favorites set`);
   }
 
-  throw new Error("No more valid riddles found in pool");
-}
+  const posters = favoritesSection.querySelectorAll("li.posteritem");
 
-function showLoadingSpinner() {
-  document.getElementById("story").innerHTML = `
-    <div class="loading-spinner">
-      <div class="spinner"></div>
-      <span class="loading-text">finding next movie...</span>
-    </div>
-  `;
-}
+  if (posters.length === 0) {
+    throw new Error(`User "${username}" has no favorites set`);
+  }
 
-function renderRiddle(riddle) {
-  const storyEl = document.getElementById("story");
-  storyEl.classList.remove('revealed'); // Remove highlight from previous riddle
+  const favorites = [];
 
-  storyEl.innerHTML =
-    `<span class="first-sentence">${riddle.title}</span>
-     <span id="hiddenSentence" class="censor-block" title="reveal">
-       <span class="censor-highlight">${riddle.answer}</span>
-     </span>
-     <span class="upvotes">${riddle.score.toLocaleString()} upvotes</span>
-     <div class="selectors">
-       <select id="sort">
-         <option value="all" ${lastSort === "all" ? "selected" : ""}>top all time</option>
-         <option value="year" ${lastSort === "year" ? "selected" : ""}>top this year</option>
-         <option value="month" ${lastSort === "month" ? "selected" : ""}>top this month</option>
-         <option value="new" ${lastSort === "new" ? "selected" : ""}>new</option>
-       </select>
-       <button id="reload">next movie</button>
-     </div>
-     <img id="moviePoster" class="movie-poster" alt="${riddle.answer}">`;
+  for (let i = 0; i < posters.length; i++) {
+    const poster = posters[i];
+    const reactComponent = poster.querySelector("div.react-component");
+    const filmName = reactComponent?.getAttribute("data-item-name");
 
-  const el = document.getElementById("hiddenSentence");
-  const mark = el.querySelector('.censor-highlight');
-  const poster = document.getElementById("moviePoster");
-  let isRevealed = false;
+    // skip unknown films
+    if (!filmName || filmName === "Unknown Film") continue;
 
-  document.getElementById("reload").onclick = showNextRiddle;
-  document.getElementById("sort").onchange = loadInitialPosts;
+    const filmLink = reactComponent?.getAttribute("data-item-link");
+    const detailsEndpoint = reactComponent?.getAttribute("data-details-endpoint");
+    // extract slug from /film/slug/
+    const filmSlug = filmLink ? filmLink.split('/')[2] : null;
 
-  if (!riddle.posterLoaded) {
-    getMoviePoster(riddle.answer).then(url => {
-      riddle.posterUrl = url;
-      riddle.posterLoaded = true;
-      if (url && poster) poster.src = url;
+    favorites.push({
+      name: filmName,
+      filmLink: filmLink,
+      filmSlug: filmSlug,
+      detailsEndpoint: detailsEndpoint
     });
-  } else if (riddle.posterUrl) {
-    poster.src = riddle.posterUrl;
+
+    if (favorites.length >= 4) break;
   }
 
-  poster.onload = function () {
-    if (isRevealed && this.src) {
-      this.classList.add('loaded');
-      setTimeout(() => this.classList.add('visible'), 10);
+  if (favorites.length === 0) {
+    throw new Error(`User "${username}" has no valid favorites`);
+  }
+
+  // fetch poster urls
+  const posterPromises = favorites.map(f => fetchPosterUrl(f.detailsEndpoint, f.filmLink));
+  const posterUrls = await Promise.all(posterPromises);
+
+  favorites.forEach((f, i) => {
+    f.posterUrl = posterUrls[i];
+  });
+
+  // fetch reviews for each film
+  const reviewPromises = favorites.map(f => fetchFilmReview(username, f.filmSlug));
+  const reviews = await Promise.all(reviewPromises);
+
+  favorites.forEach((f, i) => {
+    f.rating = reviews[i].rating;
+    f.review = reviews[i].review;
+    delete f.filmLink;
+    delete f.filmSlug;
+    delete f.detailsEndpoint;
+  });
+
+  return favorites;
+}
+
+// user loading --------------------------------------------------
+
+async function loadUser(username) {
+  if (isLoading) return;
+
+  try {
+    isLoading = true;
+    showLoading();
+
+    const favorites = await fetchFavorites(username);
+    currentUsername = username;
+    renderFavorites(favorites, username);
+
+  } catch (err) {
+    console.error("Error loading user:", err);
+    showError(err.message);
+  } finally {
+    isLoading = false;
+  }
+}
+
+async function loadRandomUser() {
+  if (isLoading) return;
+  document.getElementById("actionBtn").disabled = true;
+
+  try {
+    // if queue is empty, show specific loading message
+    if (userQueue.length === 0) {
+      const content = document.getElementById("content");
+      content.innerHTML = `
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <span class="loading-text">finding random users...</span>
+        </div>
+      `;
+      // force a small delay to ensure the ui updates before blocking on await
+      await new Promise(r => setTimeout(r, 50));
     }
-  };
 
-  poster.onerror = function () { this.style.display = 'none'; };
-
-  el.addEventListener('click', function () {
-    const storyEl = document.getElementById('story');
-    if (isRevealed) {
-      mark.style.background = '#101010';
-      mark.style.color = '#101010';
-      el.setAttribute("title", "reveal");
-      poster.classList.remove('visible', 'loaded');
-      storyEl.classList.remove('revealed');
-    } else {
-      mark.style.background = 'transparent';
-      mark.style.color = '#181818';
-      el.removeAttribute("title");
-      storyEl.classList.add('revealed');
-
-      if (riddle.posterUrl && poster.complete && poster.naturalHeight > 0) {
-        poster.classList.add('loaded');
-        setTimeout(() => poster.classList.add('visible'), 10);
-      } else if (riddle.posterUrl) {
-        poster.classList.add('loaded');
+    // if queue is getting low, trigger background fetch
+    if (userQueue.length < 5) {
+      console.log("Queue low, fetching more users...");
+      // for initial load (or when empty) we must await it
+      if (userQueue.length === 0) {
+        await fetchMoreUsers();
+      } else {
+        // otherwise do it in background
+        fetchMoreUsers().catch(err => console.error("Background fetch failed:", err));
       }
     }
-    isRevealed = !isRevealed;
-  });
-}
 
-async function loadInitialPosts() {
-  const sort = document.getElementById("sort")?.value || "all";
-  document.getElementById("story").innerHTML = '<span class="loading">loading post pool...</span>';
+    let username = await getNextUser();
 
-  try {
-    if (sort !== lastSort || !posts.length) {
-      posts = shuffle(await getPostList(sort));
-      validatedRiddles = [];
-      lastSort = sort;
+    // safety check - if still no user after fetch, we have a problem
+    if (!username) {
+      throw new Error("Could not find any users");
     }
 
-    if (!posts.length) throw new Error("No posts found.");
-    await showNextRiddle();
-  } catch (e) {
-    document.getElementById("story").innerHTML =
-      `<span class="loading">failed to load: ${e.message}</span>`;
-  }
-}
-
-async function showNextRiddle() {
-  if (isLoadingPost) return;
-
-  try {
-    isLoadingPost = true;
-    showLoadingSpinner();
-    const riddle = await getNextValidRiddle();
-    renderRiddle(riddle);
-  } catch (e) {
-    document.getElementById("story").innerHTML =
-      `<span class="loading">failed to load riddle: ${e.message}</span>`;
+    document.getElementById("usernameInput").value = username;
+    await loadUser(username);
+  } catch (err) {
+    console.error("Error loading random user:", err);
+    showError("Failed to find a random user. Please try again.");
   } finally {
-    isLoadingPost = false;
+    document.getElementById("actionBtn").disabled = false;
   }
 }
 
-window.onload = loadInitialPosts;
+// button controls -----------------------------------------------
 
-// info popup functionality
+document.addEventListener("DOMContentLoaded", () => {
+  const reviewToggle = document.getElementById("reviewToggle");
+  const contentEl = document.getElementById("content");
+
+  if (reviewToggle && contentEl) {
+    reviewToggle.addEventListener("change", () => {
+      if (reviewToggle.checked) {
+        contentEl.classList.add("show-reviews");
+      } else {
+        contentEl.classList.remove("show-reviews");
+      }
+    });
+
+    // Initialize state
+    if (reviewToggle.checked) {
+      contentEl.classList.add("show-reviews");
+    }
+  }
+});
+
+function updateButtonState() {
+  const input = document.getElementById("usernameInput");
+  const btn = document.getElementById("actionBtn");
+
+  if (input.value.trim() !== currentUsername && input.value.trim() !== "") {
+    currentMode = "load";
+    btn.textContent = "load";
+  } else {
+    currentMode = "next";
+    btn.textContent = "next";
+  }
+}
+
+async function handleAction() {
+  if (isLoading) return;
+
+  const input = document.getElementById("usernameInput");
+  const username = input.value.trim();
+
+  if (currentMode === "load" && username) {
+    await loadUser(username);
+    currentMode = "next";
+    document.getElementById("actionBtn").textContent = "next";
+  } else {
+    await loadRandomUser();
+  }
+}
+
+// initialization ------------------------------------------------
+
+window.onload = async function () {
+  const input = document.getElementById("usernameInput");
+  const btn = document.getElementById("actionBtn");
+
+  input.addEventListener("input", updateButtonState);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAction();
+    }
+  });
+  btn.addEventListener("click", handleAction);
+
+  await loadRandomUser();
+};
+
+// info popup ----------------------------------------------------
+
 const infoBtn = document.getElementById('infoBtn');
 const infoPopup = document.getElementById('infoPopup');
 const closePopup = document.getElementById('closePopup');
@@ -312,39 +516,35 @@ infoPopup.addEventListener('click', (e) => {
   }
 });
 
-// close popup with Escape key
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && infoPopup.classList.contains('show')) {
     infoPopup.classList.remove('show');
   }
 });
 
+// disable background code ----------------------------------------------------
 
-// clicking the favicon 5 times disables the background (easter egg)
 let clickCount = 0;
 let backgroundEnabled = true;
 
 const headerFavicon = document.querySelector('.header-favicon');
 
-headerFavicon.addEventListener('click', (e) => {
-  e.preventDefault();
-  clickCount++;
-  console.log(`Favicon clicked! Count: ${clickCount}`);
+if (headerFavicon) {
+  headerFavicon.addEventListener('click', (e) => {
+    e.preventDefault();
+    clickCount++;
 
-  // toggle background on 5th click
-  if (clickCount === 5) {
-    backgroundEnabled = !backgroundEnabled;
-    const container = document.querySelector('.container');
+    if (clickCount === 5) {
+      backgroundEnabled = !backgroundEnabled;
+      const container = document.querySelector('.container');
 
-    if (backgroundEnabled) {
-      container.classList.remove('no-background');
-      console.log('Background enabled');
-    } else {
-      container.classList.add('no-background');
-      console.log('Background disabled');
+      if (backgroundEnabled) {
+        container.classList.remove('no-background');
+      } else {
+        container.classList.add('no-background');
+      }
+
+      clickCount = 0;
     }
-
-    clickCount = 0;
-  }
-});
-
+  });
+}

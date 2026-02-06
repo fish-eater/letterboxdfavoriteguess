@@ -161,6 +161,34 @@ input:checked+.slider:before {
   transform: translateX(14px);
 }
 
+.share-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.copy-toast {
+  position: absolute;
+  top: 110%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.7em;
+  font-family: sans-serif;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  white-space: nowrap;
+  z-index: 100;
+}
+
+.copy-toast.show {
+  opacity: 1;
+}
+
 .info-popup {
   display: none;
   position: fixed;

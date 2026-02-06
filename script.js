@@ -447,6 +447,21 @@ document.addEventListener("DOMContentLoaded", () => {
       contentEl.classList.add("show-reviews");
     }
   }
+
+  const shareBtn = document.getElementById("shareBtn");
+  const copyToast = document.getElementById("copyToast");
+  if (shareBtn && copyToast) {
+    shareBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+        copyToast.classList.add("show");
+        setTimeout(() => {
+          copyToast.classList.remove("show");
+        }, 2000);
+      }).catch(err => {
+        console.error("Failed to copy: ", err);
+      });
+    });
+  }
 });
 
 function updateButtonState() {

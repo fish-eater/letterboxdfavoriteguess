@@ -189,97 +189,97 @@ input:checked+.slider:before {
   opacity: 1;
 }
 
-.info-popup {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 1000;
-  align-items: center;
-  justify-content: center;
-}
-
-.info-popup.show {
+/* Layout */
+.main-layout {
   display: flex;
-  animation: fadeIn 0.2s ease-in;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 1200px;
+  padding: 0 16px;
+  box-sizing: border-box;
+  margin-top: 1.6em;
+  transition: all 0.3s ease;
 }
 
-.info-popup-content {
-  background: #fff;
-  padding: 2em;
+.about-panel {
+  width: 300px;
+  background: white;
   border-radius: 12px;
-  max-width: 450px;
-  width: 90%;
+  box-shadow: 0 2px 12px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 1;
+  transform: translateX(0);
+  margin-right: 0;
+  height: fit-content;
   position: relative;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  animation: slideIn 0.3s ease-out;
+  flex-shrink: 0;
 }
 
-.info-popup-content h3 {
+.about-panel.closed {
+  width: 0;
+  opacity: 0;
+  margin-right: -20px;
+  /* Compensate for grid gap */
+  padding: 0;
+  transform: translateX(-20px);
+  pointer-events: none;
+}
+
+.about-content {
+  padding: 24px;
+  width: 300px;
+  /* Force width to prevent reflow */
+  box-sizing: border-box;
+}
+
+.about-content h3 {
   margin: 0 0 1em;
   color: #191919;
-  font-size: 1.4em;
+  font-size: 1.2em;
 }
 
-.info-popup-content p {
+.about-content p {
   margin: 0.8em 0;
-  line-height: 1.6;
+  line-height: 1.5;
   color: #333;
+  font-size: 0.95em;
 }
 
-.info-popup-content a {
+.about-content a {
   color: #191919;
   text-decoration: underline;
   font-weight: 600;
 }
 
-.info-popup-content a:hover {
-  color: #444;
-}
-
-.info-close {
+.panel-close {
   position: absolute;
-  top: 0.5em;
-  right: 0.5em;
+  top: 10px;
+  right: 10px;
   background: transparent;
   border: none;
-  font-size: 2em;
-  color: #666;
+  font-size: 1.8em;
+  color: #999;
   cursor: pointer;
+  line-height: 1;
   padding: 0;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: color 0.2s;
 }
 
-.info-close:hover {
-  color: #191919;
+.panel-close:hover {
+  color: #333;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
 
-  to {
-    opacity: 1;
-  }
-}
 
-@keyframes slideIn {
-  from {
-    transform: translateY(-20px);
-    opacity: 0;
-  }
 
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
 
 .header-right {
   display: flex;
@@ -325,9 +325,8 @@ main {
   align-items: center;
 }
 
-.container {
-  padding: 26px 16px 20px 16px;
-  min-width: 320px;
+.game-container {
+  flex: 1;
   max-width: 700px;
   width: 100%;
   text-align: center;
@@ -335,11 +334,12 @@ main {
   box-shadow: 0 2px 12px 3px rgba(0, 0, 0, 0.15);
   position: relative;
   overflow: hidden;
-  margin: 1.6em 0;
   background: rgba(255, 255, 255, 0.8);
+  padding: 26px 16px 20px 16px;
+  transition: all 0.3s ease;
 }
 
-.container::before {
+.game-container::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -352,12 +352,19 @@ main {
   pointer-events: none;
 }
 
-.container>* {
+.game-container>* {
   position: relative;
   z-index: 1;
 }
 
-.container.no-background::before {
+.game-container.no-background::before,
+.game-container.no-background {
+  background: #fbfbfb;
+  box-shadow: none;
+  border: 1px solid #eee;
+}
+
+.game-container.no-background::before {
   display: none;
 }
 
@@ -608,6 +615,32 @@ main {
   font-size: 16px;
   padding: 20px;
   text-shadow: 0 0 8px rgba(255, 255, 255, 1), 0 0 4px rgba(255, 255, 255, 1);
+}
+
+@media (max-width: 900px) {
+  .main-layout {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .about-panel {
+    width: 100%;
+    max-width: 700px;
+    margin-right: 0;
+    margin-bottom: 20px;
+  }
+
+  .about-panel.closed {
+    margin-bottom: -300px;
+    /* Rough height estimate to pull content up */
+    margin-right: 0;
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+
+  .about-content {
+    width: 100%;
+  }
 }
 
 @media (max-width: 650px) {

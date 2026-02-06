@@ -473,7 +473,7 @@ function updateButtonState() {
     btn.textContent = "load";
   } else {
     currentMode = "next";
-    btn.textContent = "next";
+    btn.textContent = "next user";
   }
 }
 
@@ -486,7 +486,7 @@ async function handleAction() {
   if (currentMode === "load" && username) {
     await loadUser(username);
     currentMode = "next";
-    document.getElementById("actionBtn").textContent = "next";
+    document.getElementById("actionBtn").textContent = "next user";
   } else {
     await loadRandomUser();
   }
@@ -510,30 +510,30 @@ window.onload = async function () {
   await loadRandomUser();
 };
 
-// info popup ----------------------------------------------------
+// about panel ---------------------------------------------------
 
 const infoBtn = document.getElementById('infoBtn');
-const infoPopup = document.getElementById('infoPopup');
-const closePopup = document.getElementById('closePopup');
+const aboutPanel = document.getElementById('aboutPanel');
+const closePanel = document.getElementById('closePanel');
 
-infoBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  infoPopup.classList.add('show');
-});
-
-closePopup.addEventListener('click', () => {
-  infoPopup.classList.remove('show');
-});
-
-infoPopup.addEventListener('click', (e) => {
-  if (e.target === infoPopup) {
-    infoPopup.classList.remove('show');
+function togglePanel(e) {
+  if (e) e.stopPropagation();
+  if (aboutPanel) {
+    aboutPanel.classList.toggle('closed');
   }
-});
+}
+
+if (infoBtn) {
+  infoBtn.addEventListener('click', togglePanel);
+}
+
+if (closePanel) {
+  closePanel.addEventListener('click', togglePanel);
+}
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && infoPopup.classList.contains('show')) {
-    infoPopup.classList.remove('show');
+  if (e.key === 'Escape' && aboutPanel && !aboutPanel.classList.contains('closed')) {
+    aboutPanel.classList.add('closed');
   }
 });
 
@@ -551,7 +551,7 @@ if (headerFavicon) {
 
     if (clickCount === 5) {
       backgroundEnabled = !backgroundEnabled;
-      const container = document.querySelector('.container');
+      const container = document.querySelector('.game-container');
 
       if (backgroundEnabled) {
         container.classList.remove('no-background');

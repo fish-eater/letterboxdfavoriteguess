@@ -19,6 +19,7 @@
       <span class="creator">made for <a href="https://www.tiktok.com/@jarrett_warlick" class="header-link"
           target="_blank">Jarrett Warlick's Tiktok</a></span>
       <button class="info-btn" id="infoBtn" aria-label="Information">about</button>
+      <a href="https://fish-eater.github.io" class="info-btn" aria-label="More Games">more games</a>
       <div class="share-container">
         <button class="info-btn" id="shareBtn" aria-label="Share">share</button>
         <div id="copyToast" class="copy-toast">Copied!</div>
@@ -31,33 +32,39 @@
         <span class="toggle-label">show text reviews</span>
       </div>
     </div>
-    <div class="info-popup" id="infoPopup">
-      <div class="info-popup-content">
-        <button class="info-close" id="closePopup">&times;</button>
-        <h3>about this game</h3>
-        <p>guess a user's favorite film based on their other favorites from letterboxd</p>
-        <p>the first poster is hidden - click to reveal after you guess.</p>
-        <p><strong>Source Code:</strong> <a href="https://github.com/fish-eater/letterboxdfavoriteguess">github</a></p>
-        <p>this website was created for Jarrett Warlick's content. It was his idea, and he requested it be made.</p>
-        <p>have an idea for a game or need to contact?</p>
-        <p><strong>Contact:</strong> <a href="mailto:wyattekarnes@gmail.com">wyattekarnes@gmail.com</a></p>
-      </div>
-    </div>
     <div class="header-right">
       <span class="creator">by <a href="https://fish-eater.github.io" target="_blank">fish-eater</a></span>
       <button class="donate-btn" onclick="window.open('https://buymeacoffee.com/wyattkarnes', '_blank')">Donate</button>
     </div>
   </header>
   <main>
-    <div class="container">
-      <div class="username-controls">
-        <img src="llogo.svg" alt="Letterboxd" class="input-logo">
-        <span class="url-prefix">letterboxd.com/</span>
-        <input type="text" id="usernameInput" placeholder="username">
-        <button id="actionBtn">next</button>
+    <div class="main-layout">
+      <!-- About Panel -->
+      <div class="about-panel" id="aboutPanel">
+        <div class="about-content">
+          <button class="panel-close" id="closePanel">&times;</button>
+          <h3>about this game</h3>
+          <p>guess a user's favorite film based on their other favorites from letterboxd</p>
+          <p>the first poster is hidden - click to reveal after you guess.</p>
+          <p><strong>Source Code:</strong> <a href="https://github.com/fish-eater/letterboxdfavoriteguess">github</a>
+          </p>
+          <p>this website was created for Jarrett Warlick's content. It was his idea, and he requested it be made.</p>
+          <p>have an idea for a game or need to contact?</p>
+          <p><strong>Contact:</strong> <a href="mailto:fisheater@disroot.org">fisheater@disroot.org</a></p>
+        </div>
       </div>
-      <div id="content" class="content">
-        <span class="loading">loading favorites...</span>
+
+      <!-- Game Container -->
+      <div class="game-container">
+        <div class="username-controls">
+          <img src="llogo.svg" alt="Letterboxd" class="input-logo">
+          <span class="url-prefix">letterboxd.com/</span>
+          <input type="text" id="usernameInput" placeholder="username">
+          <button id="actionBtn">next user</button>
+        </div>
+        <div id="content" class="content">
+          <span class="loading">loading favorites...</span>
+        </div>
       </div>
     </div>
   </main>
